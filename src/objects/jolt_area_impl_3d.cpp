@@ -215,7 +215,7 @@ bool JoltAreaImpl3D::can_monitor(const JoltBodyImpl3D& p_other) const {
 }
 
 bool JoltAreaImpl3D::can_monitor([[maybe_unused]] const JoltSoftBodyImpl3D& p_other) const {
-	return false;
+	return (collision_mask & p_other.get_collision_layer()) != 0;
 }
 
 bool JoltAreaImpl3D::can_monitor(const JoltAreaImpl3D& p_other) const {
@@ -226,8 +226,8 @@ bool JoltAreaImpl3D::can_interact_with(const JoltBodyImpl3D& p_other) const {
 	return can_monitor(p_other);
 }
 
-bool JoltAreaImpl3D::can_interact_with([[maybe_unused]] const JoltSoftBodyImpl3D& p_other) const {
-	return false;
+bool JoltAreaImpl3D::can_interact_with(const JoltSoftBodyImpl3D& p_other) const {
+	return can_monitor(p_other);
 }
 
 bool JoltAreaImpl3D::can_interact_with(const JoltAreaImpl3D& p_other) const {
@@ -458,7 +458,7 @@ void JoltAreaImpl3D::_add_shape_pair(
 	const JPH::SubShapeID& p_self_shape_id
 ) {
 	const JoltReadableBody3D other_jolt_body = space->read_body(p_body_id);
-	const JoltShapedObjectImpl3D* other_object = other_jolt_body.as_shaped();
+	const JoltObjectImpl3D* other_object = other_jolt_body.as_object();
 	ERR_FAIL_NULL(other_object);
 
 	p_overlap.rid = other_object->get_rid();
@@ -466,7 +466,8 @@ void JoltAreaImpl3D::_add_shape_pair(
 
 	ShapeIndexPair& shape_indices = p_overlap.shape_pairs[{p_other_shape_id, p_self_shape_id}];
 
-	shape_indices.other = other_object->find_shape_index(p_other_shape_id);
+	const JoltShapedObjectImpl3D* other_shaped_object = other_jolt_body.as_shaped();
+	shape_indices.other = other_shaped_object != nullptr? other_shaped_object->find_shape_index(p_other_shape_id) : -1;
 	shape_indices.self = find_shape_index(p_self_shape_id);
 
 	p_overlap.pending_added.push_back(shape_indices);

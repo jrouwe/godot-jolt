@@ -34,7 +34,7 @@ void JoltContactListener3D::OnContactAdded(
 	_try_override_collision_response(p_body1, p_body2, p_settings);
 	_try_apply_surface_velocities(p_body1, p_body2, p_settings);
 	_try_add_contacts(p_body1, p_body2, p_manifold, p_settings);
-	_try_evaluate_area_overlap(p_body1, p_body2, p_manifold);
+	_try_evaluate_area_overlap(p_body1, p_body2, p_manifold.mSubShapeID1, p_manifold.mSubShapeID2);
 
 #ifdef GDJ_CONFIG_EDITOR
 	_try_add_debug_contacts(p_body1, p_body2, p_manifold);
@@ -50,7 +50,7 @@ void JoltContactListener3D::OnContactPersisted(
 	_try_override_collision_response(p_body1, p_body2, p_settings);
 	_try_apply_surface_velocities(p_body1, p_body2, p_settings);
 	_try_add_contacts(p_body1, p_body2, p_manifold, p_settings);
-	_try_evaluate_area_overlap(p_body1, p_body2, p_manifold);
+	_try_evaluate_area_overlap(p_body1, p_body2, p_manifold.mSubShapeID1, p_manifold.mSubShapeID2);
 
 #ifdef GDJ_CONFIG_EDITOR
 	_try_add_debug_contacts(p_body1, p_body2, p_manifold);
@@ -73,16 +73,21 @@ JPH::SoftBodyValidateResult JoltContactListener3D::OnSoftBodyContactValidate(
 	return JPH::SoftBodyValidateResult::AcceptContact;
 }
 
-#ifdef GDJ_CONFIG_EDITOR
-
 void JoltContactListener3D::OnSoftBodyContactAdded(
 	const JPH::Body& p_soft_body,
 	const JPH::SoftBodyManifold& p_manifold
 ) {
-	_try_add_debug_contacts(p_soft_body, p_manifold);
-}
+	JPH::uint sensor_contacts = p_manifold.GetNumSensorContacts();
+	for (JPH::uint contact = 0; contact < sensor_contacts; contact++)
+	{
+		JoltReadableBody3D readable_body = space->read_body(p_manifold.GetSensorContactBodyID(contact));
+		_try_evaluate_area_overlap(p_soft_body, *readable_body, JPH::SubShapeID(), JPH::SubShapeID());
+	}
 
+#ifdef GDJ_CONFIG_EDITOR
+	_try_add_debug_contacts(p_soft_body, p_manifold);
 #endif // GDJ_CONFIG_EDITOR
+}
 
 bool JoltContactListener3D::_is_listening_for(const JPH::Body& p_body) const {
 	return listening_for.has(p_body.GetID());
@@ -279,7 +284,8 @@ bool JoltContactListener3D::_try_add_contacts(
 bool JoltContactListener3D::_try_evaluate_area_overlap(
 	const JPH::Body& p_body1,
 	const JPH::Body& p_body2,
-	const JPH::ContactManifold& p_manifold
+	const JPH::SubShapeID& p_sub_shape_id1,
+	const JPH::SubShapeID& p_sub_shape_id2
 ) {
 	if (!p_body1.IsSensor() && !p_body2.IsSensor()) {
 		return false;
@@ -302,16 +308,16 @@ bool JoltContactListener3D::_try_evaluate_area_overlap(
 
 	const JPH::SubShapeIDPair shape_pair1(
 		p_body1.GetID(),
-		p_manifold.mSubShapeID1,
+		p_sub_shape_id1,
 		p_body2.GetID(),
-		p_manifold.mSubShapeID2
+		p_sub_shape_id2
 	);
 
 	const JPH::SubShapeIDPair shape_pair2(
 		p_body2.GetID(),
-		p_manifold.mSubShapeID2,
+		p_sub_shape_id2,
 		p_body1.GetID(),
-		p_manifold.mSubShapeID1
+		p_sub_shape_id1
 	);
 
 	const auto* object1 = reinterpret_cast<JoltObjectImpl3D*>(p_body1.GetUserData());
@@ -323,6 +329,9 @@ bool JoltContactListener3D::_try_evaluate_area_overlap(
 	const JoltBodyImpl3D* body1 = object1->as_body();
 	const JoltBodyImpl3D* body2 = object2->as_body();
 
+	const JoltSoftBodyImpl3D* soft_body1 = object1->as_soft_body();
+	const JoltSoftBodyImpl3D* soft_body2 = object2->as_soft_body();
+
 	if (area1 != nullptr && area2 != nullptr) {
 		evaluate(*area1, *area2, shape_pair1);
 		evaluate(*area2, *area1, shape_pair2);
@@ -330,6 +339,10 @@ bool JoltContactListener3D::_try_evaluate_area_overlap(
 		evaluate(*area1, *body2, shape_pair1);
 	} else if (area2 != nullptr && body1 != nullptr) {
 		evaluate(*area2, *body1, shape_pair2);
+	} else if (area1 != nullptr && soft_body2 != nullptr) {
+		evaluate(*area1, *soft_body2, shape_pair1);
+	} else if (area2 != nullptr && soft_body1 != nullptr) {
+		evaluate(*area2, *soft_body1, shape_pair2);
 	}
 
 	return true;
@@ -551,7 +564,7 @@ void JoltContactListener3D::_flush_area_shifts() {
 		auto is_shifted = [&](const JPH::BodyID& p_body_id, const JPH::SubShapeID& p_sub_shape_id) {
 			const JoltReadableBody3D jolt_body = space->read_body(p_body_id);
 			const JoltShapedObjectImpl3D* object = jolt_body.as_shaped();
-			ERR_FAIL_NULL_V(object, false);
+			QUIET_FAIL_NULL_V(object, false);
 
 			if (object->get_previous_jolt_shape() == nullptr) {
 				return false;

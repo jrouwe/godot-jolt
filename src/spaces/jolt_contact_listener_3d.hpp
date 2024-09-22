@@ -99,12 +99,10 @@ private:
 		JPH::SoftBodyContactSettings& p_settings
 	) override;
 
-#ifdef GDJ_CONFIG_EDITOR
 	void OnSoftBodyContactAdded(
 		const JPH::Body& p_soft_body,
 		const JPH::SoftBodyManifold& p_manifold
 	) override;
-#endif // GDJ_CONFIG_EDITOR
 
 	bool _is_listening_for(const JPH::Body& p_body) const;
 
@@ -136,7 +134,8 @@ private:
 	bool _try_evaluate_area_overlap(
 		const JPH::Body& p_body1,
 		const JPH::Body& p_body2,
-		const JPH::ContactManifold& p_manifold
+		const JPH::SubShapeID& p_sub_shape_id1,
+		const JPH::SubShapeID& p_sub_shape_id2
 	);
 
 	bool _try_remove_contacts(const JPH::SubShapeIDPair& p_shape_pair);
